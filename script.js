@@ -97,55 +97,84 @@ const xAxisGroup = graph
   .attr('transform', `translate(0, ${graphHeight})`);
 const yAxisGroup = graph.append('g');
 
-db.collection('dishes')
-  .get()
-  .then(res => {
-    var data = [];
-    res.docs.forEach(doc => {
-      data.push(doc.data());
-    });
+const y = d3.scaleLinear().range([graphHeight, 0]);
 
-    const y = d3
-      .scaleLinear()
-      .domain([0, d3.max(data, d => d.orders)])
-      .range([graphHeight, 0]);
+const x = d3.scaleBand().range([0, 500]).paddingInner(0.2).paddingOuter(0.2);
 
-    const x = d3
-      .scaleBand()
-      .domain(data.map(item => item.name))
-      .range([0, 500])
-      .paddingInner(0.2)
-      .paddingOuter(0.2);
+const xAxis = d3.axisBottom(x);
+const yAxis = d3
+  .axisLeft(y)
+  .ticks(3)
+  .tickFormat(d => d + ' orders');
 
-    const rects = graph.selectAll('rect').data(data);
+xAxisGroup
+  .selectAll('text')
+  .attr('transform', 'rotate(-40)')
+  .attr('text-anchor', 'end')
+  .attr('fill', 'orange');
 
-    rects
-      .attr('width', x.bandwidth)
-      .attr('height', d => graphHeight - y(d.orders))
-      .attr('fill', 'orange')
-      .attr('x', d => x(d.name))
-      .attr('y', d => y(d.orders));
+const t = d3.transition().duration(1500);
 
-    rects
-      .enter()
-      .append('rect')
-      .attr('width', x.bandwidth)
-      .attr('height', d => graphHeight - y(d.orders))
-      .attr('fill', 'orange')
-      .attr('x', d => x(d.name))
-      .attr('y', d => y(d.orders));
+const update = data => {
+  y.domain([0, d3.max(data, d => d.orders)]);
+  x.domain(data.map(item => item.name));
 
-    const xAxis = d3.axisBottom(x);
-    const yAxis = d3
-      .axisLeft(y)
-      .ticks(3)
-      .tickFormat(d => d + ' orders');
+  const rects = graph.selectAll('rect').data(data);
 
-    xAxisGroup.call(xAxis);
-    yAxisGroup.call(yAxis);
+  rects.exit().remove();
 
-    xAxisGroup
-      .selectAll('text')
-      .attr('transform', 'rotate(-40)')
-      .attr('text-anchor', 'end');
+  rects
+    .attr('width', x.bandwidth)
+    .attr('fill', 'orange')
+    .attr('x', d => x(d.name))
+    .transition(t)
+    .attr('height', d => graphHeight - y(d.orders))
+    .attr('y', d => y(d.orders));
+
+  rects
+    .enter()
+    .append('rect')
+    .attr('height', 0)
+    .attr('fill', 'orange')
+    .attr('x', d => x(d.name))
+    .attr('y', graphHeight)
+    .transition(t)
+    .attrTween('width', widthTween)
+    .attr('y', d => y(d.orders))
+    .attr('height', d => graphHeight - y(d.orders));
+
+  xAxisGroup.call(xAxis);
+  yAxisGroup.call(yAxis);
+};
+
+var data = [];
+
+db.collection('dishes').onSnapshot(res => {
+  res.docChanges().forEach(change => {
+    const doc = { ...change.doc.data(), id: change.doc.id };
+
+    switch (change.type) {
+      case 'added':
+        data.push(doc);
+        break;
+      case 'modifed':
+        const index = data.findIndex(item => item.id == doc.id);
+        data[index] = doc;
+        break;
+      case 'removed':
+        data = data.filter(item => item.id !== doc.id);
+        break;
+      default:
+        break;
+    }
   });
+  update(data);
+});
+
+const widthTween = d => {
+  let i = d3.interpolate(0, x.bandwidth());
+
+  return function (t) {
+    return i(t);
+  };
+};
