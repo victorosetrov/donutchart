@@ -29,14 +29,18 @@ const legendGroup = svg
   .append('g')
   .attr('transform', `translate(${dims.width + 40}, 10)`);
 
-const legend = d3.legendColor().shape('circle').shapePadding(10).scale(colour);
+const legend = d3
+  .legendColor()
+  .shape('path', d3.symbol())
+  .shapePadding(10)
+  .scale(colour);
 
 const tip = d3
   .tip()
   .attr('class', 'tip card')
   .html(d => {
     let content = `<div class='name'>${d.data.name}</div>`;
-    content += `<div class='cost'>${d.data.cost}</div>`;
+    content += `<div class='cost'>€${d.data.cost}</div>`;
     content += `<div class='delete'>Click slice to delete</div>`;
     return content;
   });
@@ -65,6 +69,7 @@ const update = data => {
     .attr('class', 'arc')
     .attr('stroke', '#fff')
     .attr('stroke-width', 3)
+    .attr('d', arcPath)
     .attr('fill', d => colour(d.data.name))
     .each(function (d) {
       this._current = d;
@@ -72,46 +77,48 @@ const update = data => {
     .transition()
     .duration(750)
     .attrTween('d', arcTweenEnter);
-};
 
-graph
-  .selectAll('path')
-  .on('mouseover', (d, i, n) => {
-    tip.show(d, n[i]);
-    handleMouseOver(d, i, n);
-  })
-  .on('mouseout', (d, i, n) => {
-    tip.hide();
-    handleMouseOut(d, i, n);
-  })
-  .on('click', handleClick);
+  graph
+    .selectAll('path')
+    .on('mouseover', (d, i, n) => {
+      tip.show(d, n[i]);
+      handleMouseOver(d, i, n);
+    })
+    .on('mouseout', (d, i, n) => {
+      tip.hide();
+      handleMouseOut(d, i, n);
+    })
+    .on('click', handleClick);
+};
 
 var data = [];
 
-db.collection('expenses').onSnapshot(res => {
-  res.docChanges().forEach(change => {
-    const doc = { ...change.doc.data(), id: change.doc.id };
+db.collection('expenses')
+  .orderBy('cost')
+  .onSnapshot(res => {
+    res.docChanges().forEach(change => {
+      const doc = { ...change.doc.data(), id: change.doc.id };
 
-    switch (change.type) {
-      case 'added':
-        data.push(doc);
-        break;
-      case 'modifed':
-        const index = data.findIndex(item => item.id == doc.id);
-        data[index] = doc;
-        break;
-      case 'removed':
-        data = data.filter(item => item.id !== doc.id);
-        break;
-      default:
-        break;
-    }
+      switch (change.type) {
+        case 'added':
+          data.push(doc);
+          break;
+        case 'modified':
+          const index = data.findIndex(item => item.id == doc.id);
+          data[index] = doc;
+          break;
+        case 'removed':
+          data = data.filter(item => item.id !== doc.id);
+          break;
+        default:
+          break;
+      }
+    });
+    update(data);
   });
-  update(data);
-});
 
 const arcTweenEnter = d => {
-  var i = d3.interpolate(d.endAngle, d.startAngle);
+  var i = d3.interpolate(d.endAngle - 0.1, d.startAngle);
 
   return function (t) {
     d.startAngle = i(t);
